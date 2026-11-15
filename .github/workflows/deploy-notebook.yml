@@ -1,0 +1,297 @@
+name: Despliegue Databricks dev a prod
+
+# Se ejecuta cada vez que se hace push a main o a mano desde la pestaña Actions
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  # Carpeta Git del workspace de desarrollo donde estan los notebooks
+  NOTEBOOK_BASE: "/Workspace/Users/ismael.alexis@hotmail.com/databricks-app/proceso"
+  # Carpeta del workspace de produccion donde se despliegan
+  DEST_BASE: "/finanzas_pe/proceso"
+  WORKFLOW_NAME: "WF_FINANZAS_PE"
+  CLUSTER_NAME: "cluster_prod"
+  STORAGE_NAME: "adlsismael1004"
+  AMBIENTE: "prod"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install jq & curl
+      run: sudo apt-get update && sudo apt-get install -y jq curl
+
+    - name: Exportar notebooks desde desarrollo
+      run: |
+        ORIGIN_HOST=${{ secrets.DATABRICKS_ORIGIN_HOST }}
+        ORIGIN_TOKEN=${{ secrets.DATABRICKS_ORIGIN_TOKEN }}
+        NOTEBOOKS=("01_prepamb" "02_ingesta" "03_transform" "04_load" "05_grants")
+        mkdir -p notebooks_to_deploy
+        for nb in "${NOTEBOOKS[@]}"; do
+          echo "Exportando $nb..."
+          http_code=$(curl -s -o "notebooks_to_deploy/$nb.py" -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer $ORIGIN_TOKEN" \
+            "$ORIGIN_HOST/api/2.0/workspace/export?path=$NOTEBOOK_BASE/$nb&format=SOURCE&direct_download=true")
+          if [ "$http_code" != "200" ]; then
+            echo "❌ No se pudo exportar $nb, codigo HTTP $http_code"
+            cat "notebooks_to_deploy/$nb.py"
+            exit 1
+          fi
+          echo "✅ $nb exportado"
+        done
+
+    - name: Desplegar notebooks en produccion
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        echo "Creando carpeta $DEST_BASE si no existe..."
+        curl -s -X POST \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"path\":\"$DEST_BASE\"}" \
+          "$DEST_HOST/api/2.0/workspace/mkdirs"
+        for file in notebooks_to_deploy/*.py; do
+          name=$(basename "$file" .py)
+          dest_path="$DEST_BASE/$name"
+          echo "Importando $file → $dest_path"
+          response=$(curl -s -X POST \
+            -H "Authorization: Bearer $DEST_TOKEN" \
+            -F "path=$dest_path" \
+            -F "format=SOURCE" \
+            -F "language=PYTHON" \
+            -F "overwrite=true" \
+            -F "content=@$file" \
+            "$DEST_HOST/api/2.0/workspace/import")
+          if echo "$response" | jq -e '.error_code' > /dev/null 2>&1; then
+            echo "❌ Error importando $name: $response"
+            exit 1
+          fi
+          echo "✅ $name desplegado"
+        done
+
+    - name: Eliminar workflow anterior si existe
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        workflows_response=$(curl -s -X GET \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          "$DEST_HOST/api/2.1/jobs/list?name=$WORKFLOW_NAME")
+        existing_job_id=$(echo "$workflows_response" | jq -r --arg name "$WORKFLOW_NAME" '.jobs[]? | select(.settings.name == $name) | .job_id')
+        if [ "$existing_job_id" != "" ] && [ "$existing_job_id" != "null" ]; then
+          for id in $existing_job_id; do
+            echo "Workflow encontrado con ID $id, eliminando..."
+            curl -s -X POST \
+              -H "Authorization: Bearer $DEST_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"job_id\": $id}" \
+              "$DEST_HOST/api/2.1/jobs/delete"
+          done
+        else
+          echo "No existe un workflow previo con nombre $WORKFLOW_NAME"
+        fi
+
+    - name: Obtener ID del cluster de produccion
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        clusters_response=$(curl -s -X GET \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          "$DEST_HOST/api/2.0/clusters/list")
+        cluster_id=$(echo "$clusters_response" | jq -r --arg name "$CLUSTER_NAME" '.clusters[]? | select(.cluster_name == $name) | .cluster_id' | head -n 1)
+        if [ "$cluster_id" != "" ] && [ "$cluster_id" != "null" ]; then
+          echo "✅ Cluster $CLUSTER_NAME encontrado con ID $cluster_id"
+          echo "CLUSTER_ID=$cluster_id" >> $GITHUB_ENV
+        else
+          echo "❌ No se encontro el cluster $CLUSTER_NAME"
+          echo "Clusters disponibles:"
+          echo "$clusters_response" | jq -r '.clusters[]? | .cluster_name'
+          exit 1
+        fi
+
+    - name: Crear workflow WF_FINANZAS_PE
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        CLUSTER_ID="${{ env.CLUSTER_ID }}"
+
+        cat > workflow_config.json << EOF
+        {
+          "name": "$WORKFLOW_NAME",
+          "format": "MULTI_TASK",
+          "tasks": [
+            {
+              "task_key": "prepamb",
+              "description": "Crea catalogo, esquemas y tablas del ambiente",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/01_prepamb",
+                "source": "WORKSPACE",
+                "base_parameters": {"ambiente": "$AMBIENTE", "storage": "$STORAGE_NAME"}
+              },
+              "existing_cluster_id": "$CLUSTER_ID",
+              "timeout_seconds": 3600,
+              "max_retries": 1
+            },
+            {
+              "task_key": "ingesta_creditos",
+              "description": "Carga creditos de raw a bronze",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/02_ingesta",
+                "source": "WORKSPACE",
+                "base_parameters": {"ambiente": "$AMBIENTE", "storage": "$STORAGE_NAME", "dataset": "creditos"}
+              },
+              "existing_cluster_id": "$CLUSTER_ID",
+              "timeout_seconds": 3600,
+              "max_retries": 1,
+              "depends_on": [{"task_key": "prepamb"}]
+            },
+            {
+              "task_key": "ingesta_depositos",
+              "description": "Carga depositos de raw a bronze",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/02_ingesta",
+                "source": "WORKSPACE",
+                "base_parameters": {"ambiente": "$AMBIENTE", "storage": "$STORAGE_NAME", "dataset": "depositos"}
+              },
+              "existing_cluster_id": "$CLUSTER_ID",
+              "timeout_seconds": 3600,
+              "max_retries": 1,
+              "depends_on": [{"task_key": "prepamb"}]
+            },
+            {
+              "task_key": "transform",
+              "description": "Limpia, valida y une los datasets en silver",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/03_transform",
+                "source": "WORKSPACE",
+                "base_parameters": {"ambiente": "$AMBIENTE"}
+              },
+              "existing_cluster_id": "$CLUSTER_ID",
+              "timeout_seconds": 3600,
+              "max_retries": 1,
+              "depends_on": [{"task_key": "ingesta_creditos"}, {"task_key": "ingesta_depositos"}]
+            },
+            {
+              "task_key": "load",
+              "description": "Calcula los indicadores de gold",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/04_load",
+                "source": "WORKSPACE",
+                "base_parameters": {"ambiente": "$AMBIENTE"}
+              },
+              "existing_cluster_id": "$CLUSTER_ID",
+              "timeout_seconds": 3600,
+              "max_retries": 1,
+              "depends_on": [{"task_key": "transform"}]
+            },
+            {
+              "task_key": "grants",
+              "description": "Aplica permisos a los grupos",
+              "notebook_task": {
+                "notebook_path": "$DEST_BASE/05_grants",
+                "source": "WORKSPACE",
+                "base_parameters": {"ambiente": "$AMBIENTE"}
+              },
+              "existing_cluster_id": "$CLUSTER_ID",
+              "timeout_seconds": 3600,
+              "max_retries": 1,
+              "depends_on": [{"task_key": "load"}]
+            }
+          ],
+          "schedule": {
+            "quartz_cron_expression": "0 0 8 1 * ?",
+            "timezone_id": "America/Lima",
+            "pause_status": "PAUSED"
+          },
+          "timeout_seconds": 7200,
+          "max_concurrent_runs": 1,
+          "tags": {
+            "environment": "production",
+            "created_by": "github_actions",
+            "project": "observatorio_credito_depositos"
+          }
+        }
+        EOF
+
+        create_response=$(curl -s -X POST \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d @workflow_config.json \
+          "$DEST_HOST/api/2.1/jobs/create")
+        job_id=$(echo "$create_response" | jq -r '.job_id')
+        if [ "$job_id" != "" ] && [ "$job_id" != "null" ]; then
+          echo "✅ Workflow $WORKFLOW_NAME creado con ID $job_id"
+          echo "WORKFLOW_JOB_ID=$job_id" >> $GITHUB_ENV
+        else
+          echo "❌ Error al crear el workflow: $create_response"
+          exit 1
+        fi
+
+    - name: Ejecutar workflow
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        JOB_ID="${{ env.WORKFLOW_JOB_ID }}"
+        run_response=$(curl -s -X POST \
+          -H "Authorization: Bearer $DEST_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"job_id\": $JOB_ID}" \
+          "$DEST_HOST/api/2.1/jobs/run-now")
+        run_id=$(echo "$run_response" | jq -r '.run_id')
+        if [ "$run_id" != "" ] && [ "$run_id" != "null" ]; then
+          echo "🚀 Workflow en ejecucion, Run ID $run_id"
+          echo "🔗 $DEST_HOST/jobs/$JOB_ID/runs/$run_id"
+          echo "WORKFLOW_RUN_ID=$run_id" >> $GITHUB_ENV
+        else
+          echo "❌ Error al ejecutar el workflow: $run_response"
+          exit 1
+        fi
+
+    - name: Monitorear ejecucion
+      run: |
+        DEST_HOST=${{ secrets.DATABRICKS_DEST_HOST }}
+        DEST_TOKEN=${{ secrets.DATABRICKS_DEST_TOKEN }}
+        RUN_ID="${{ env.WORKFLOW_RUN_ID }}"
+        # Hasta 25 minutos porque el cluster puede tardar en encender
+        max_wait_time=1500
+        wait_time=0
+        check_interval=30
+        while [ $wait_time -lt $max_wait_time ]; do
+          run_status=$(curl -s -X GET \
+            -H "Authorization: Bearer $DEST_TOKEN" \
+            "$DEST_HOST/api/2.1/jobs/runs/get?run_id=$RUN_ID")
+          state=$(echo "$run_status" | jq -r '.state.life_cycle_state')
+          result_state=$(echo "$run_status" | jq -r '.state.result_state // "RUNNING"')
+          echo "⏱️  $state ($result_state) - ${wait_time}s"
+          echo "$run_status" | jq -r '.tasks[]? | "   " + .task_key + ": " + .state.life_cycle_state + " (" + (.state.result_state // "RUNNING") + ")"'
+          case "$state" in
+            "TERMINATED")
+              if [ "$result_state" = "SUCCESS" ]; then
+                echo "🎉 Workflow completado con exito"
+                exit 0
+              else
+                echo "❌ Workflow termino con errores: $result_state"
+                exit 1
+              fi
+              ;;
+            "INTERNAL_ERROR"|"SKIPPED")
+              echo "❌ Workflow fallo con estado $state"
+              exit 1
+              ;;
+          esac
+          sleep $check_interval
+          wait_time=$((wait_time + check_interval))
+        done
+        echo "⚠️  El workflow sigue corriendo, revisalo en Databricks"
+        exit 0
+
+    - name: Clean up
+      if: always()
+      run: |
+        rm -rf notebooks_to_deploy
+        rm -f workflow_config.json
