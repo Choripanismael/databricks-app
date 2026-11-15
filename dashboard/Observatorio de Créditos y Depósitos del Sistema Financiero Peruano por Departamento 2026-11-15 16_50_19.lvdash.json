@@ -1,0 +1,1467 @@
+{
+  "datasets": [
+    {
+      "name": "ultimo_mes",
+      "displayName": "Último mes disponible por departamento",
+      "config": {
+        "version": "1.1",
+        "source": "SELECT * FROM cat_finanzas_prod.gold.indicadores_departamento_mensual\nWHERE fecha = (SELECT MAX(fecha) FROM cat_finanzas_prod.gold.indicadores_departamento_mensual)",
+        "dimensions": [
+          {
+            "expr": "departamento"
+          },
+          {
+            "expr": "fecha"
+          },
+          {
+            "name": "credito",
+            "expr": "credito_total"
+          },
+          {
+            "name": "deposito",
+            "expr": "deposito_total"
+          },
+          {
+            "expr": "ratio_credito_deposito"
+          },
+          {
+            "expr": "dolarizacion_credito"
+          },
+          {
+            "expr": "var_12m_credito"
+          },
+          {
+            "expr": "participacion_credito"
+          },
+          {
+            "expr": "ranking_credito"
+          }
+        ],
+        "measures": [
+          {
+            "name": "credito_total",
+            "expr": "SUM(credito_total)"
+          },
+          {
+            "name": "deposito_total",
+            "expr": "SUM(deposito_total)"
+          },
+          {
+            "name": "ratio_cd",
+            "expr": "SUM(credito_total) / SUM(deposito_total)"
+          },
+          {
+            "name": "dolarizacion_pond",
+            "expr": "SUM(credito_total * dolarizacion_credito) / SUM(credito_total)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mensual",
+      "displayName": "Indicadores mensuales por departamento",
+      "config": {
+        "version": "1.1",
+        "source": "cat_finanzas_prod.gold.indicadores_departamento_mensual",
+        "dimensions": [
+          {
+            "expr": "departamento"
+          },
+          {
+            "expr": "fecha"
+          },
+          {
+            "expr": "anio"
+          }
+        ],
+        "measures": [
+          {
+            "name": "credito_total",
+            "expr": "SUM(credito_total)"
+          },
+          {
+            "name": "deposito_total",
+            "expr": "SUM(deposito_total)"
+          },
+          {
+            "name": "dolarizacion_credito",
+            "expr": "SUM(credito_total * dolarizacion_credito) / SUM(credito_total)"
+          }
+        ]
+      }
+    },
+    {
+      "name": "anual",
+      "displayName": "Resumen anual por departamento",
+      "config": {
+        "source": "cat_finanzas_prod.gold.resumen_anual_departamento",
+        "measures": [
+          {
+            "name": "crecimiento_credito",
+            "expr": "AVG(crecimiento_credito)"
+          }
+        ],
+        "filter": "crecimiento_credito IS NOT NULL",
+        "version": "1.1",
+        "dimensions": [
+          {
+            "expr": "departamento"
+          },
+          {
+            "expr": "anio"
+          },
+          {
+            "name": "signo",
+            "expr": "CASE WHEN crecimiento_credito >= 0 THEN 'Positivo' ELSE 'Negativo' END"
+          }
+        ]
+      }
+    },
+    {
+      "name": "intermediacion",
+      "displayName": "Mapa de intermediación, último mes",
+      "queryLines": [
+        "SELECT\n",
+        "  departamento,\n",
+        "  credito_total,\n",
+        "  deposito_total,\n",
+        "  ratio_credito_deposito,\n",
+        "  dolarizacion_credito,\n",
+        "  CASE\n",
+        "    WHEN ratio_credito_deposito > 1.2 THEN 'Presta mucho más de lo que capta'\n",
+        "    WHEN ratio_credito_deposito >= 1 THEN 'Presta más de lo que capta'\n",
+        "    ELSE 'Capta más de lo que presta'\n",
+        "  END AS segmento\n",
+        "FROM\n",
+        "  cat_finanzas_prod.gold.indicadores_departamento_mensual\n",
+        "WHERE\n",
+        "  fecha\n",
+        "    = (\n",
+        "      SELECT\n",
+        "        MAX(fecha)\n",
+        "      FROM\n",
+        "        cat_finanzas_prod.gold.indicadores_departamento_mensual\n",
+        "    )"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "de031c08",
+      "displayName": "Dashboard analisis financiero",
+      "layout": [
+        {
+          "widget": {
+            "name": "titulo",
+            "spec": {
+              "widgetType": "text",
+              "version": 1,
+              "encodings": {
+                "text": {
+                  "lines": [
+                    "# Observatorio de Créditos y Depósitos del Sistema Financiero Peruano por Departamento\n",
+                    "Saldos en millones de soles a fin de mes. Fuente BCRP con datos de la SBS. Periodo 2015 a 2025\n"
+                  ],
+                  "fields": []
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_departamento",
+            "queries": [
+              {
+                "name": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2a9a1ec6bb58155d1a7c2a01_departamento",
+                "query": {
+                  "datasetName": "mensual",
+                  "fields": [
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    },
+                    {
+                      "name": "departamento_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2a59180891246a5c2e084f71_departamento",
+                "query": {
+                  "datasetName": "ultimo_mes",
+                  "fields": [
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    },
+                    {
+                      "name": "departamento_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2ad016d1b9c70eb9b95ec74e_departamento",
+                "query": {
+                  "datasetName": "anual",
+                  "fields": [
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    },
+                    {
+                      "name": "departamento_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Departamento"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "departamento",
+                    "queryName": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2a9a1ec6bb58155d1a7c2a01_departamento"
+                  },
+                  {
+                    "fieldName": "departamento",
+                    "queryName": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2a59180891246a5c2e084f71_departamento"
+                  },
+                  {
+                    "fieldName": "departamento",
+                    "queryName": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2ad016d1b9c70eb9b95ec74e_departamento"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_fecha",
+            "queries": [
+              {
+                "name": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2a9a1ec6bb58155d1a7c2a01_fecha",
+                "query": {
+                  "datasetName": "mensual",
+                  "fields": [
+                    {
+                      "name": "fecha",
+                      "expression": "`fecha`"
+                    },
+                    {
+                      "name": "fecha_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Rango de fechas"
+              },
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "fecha",
+                    "queryName": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2a9a1ec6bb58155d1a7c2a01_fecha"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "f_anio",
+            "queries": [
+              {
+                "name": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2ad016d1b9c70eb9b95ec74e_anio",
+                "query": {
+                  "datasetName": "anual",
+                  "fields": [
+                    {
+                      "name": "anio",
+                      "expression": "`anio`"
+                    },
+                    {
+                      "name": "anio_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "disallowAll": false,
+              "scale": {
+                "type": "categorical",
+                "sort": {
+                  "by": "natural-order-reversed"
+                }
+              },
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "INTEGER",
+                    "values": [
+                      {
+                        "value": "2025"
+                      }
+                    ]
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Año (resumen anual)",
+                  "fields": []
+                }
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "anio",
+                    "queryName": "dashboards/01f1e13e8c5115fd8798e7a92814b4e4/datasets/01f1e13f2ad016d1b9c70eb9b95ec74e_anio"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 2,
+            "width": 4,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_credito",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ultimo_mes",
+                  "fields": [
+                    {
+                      "name": "measure(credito_total)",
+                      "expression": "MEASURE(`credito_total`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Crédito total",
+                "description": "Saldo de créditos del último mes disponible, millones de S/"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(credito_total)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 0
+                    }
+                  },
+                  "formatTemplate": "S/ {{ @formatted }} mill.",
+                  "style": {
+                    "fontColor": "#2375A8"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_deposito",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ultimo_mes",
+                  "fields": [
+                    {
+                      "name": "measure(deposito_total)",
+                      "expression": "MEASURE(`deposito_total`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Depósitos totales",
+                "description": "Saldo de depósitos del último mes disponible, millones de S/"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(deposito_total)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 0
+                    }
+                  },
+                  "formatTemplate": "S/ {{ @formatted }} mill.",
+                  "style": {
+                    "fontColor": "#C89930"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_ratio",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ultimo_mes",
+                  "fields": [
+                    {
+                      "name": "measure(ratio_cd)",
+                      "expression": "MEASURE(`ratio_cd`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Ratio crédito / depósito",
+                "description": "Créditos entre depósitos totales del último mes"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(ratio_cd)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_dolar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ultimo_mes",
+                  "fields": [
+                    {
+                      "name": "measure(dolarizacion_pond)",
+                      "expression": "MEASURE(`dolarizacion_pond`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Dolarización del crédito",
+                "description": "Promedio ponderado por saldo de crédito, último mes"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "measure(dolarizacion_pond)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}%"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 4,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "evolucion",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "mensual",
+                  "fields": [
+                    {
+                      "name": "monthly(fecha)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `fecha`)"
+                    },
+                    {
+                      "name": "measure(credito_total)",
+                      "expression": "MEASURE(`credito_total`)"
+                    },
+                    {
+                      "name": "measure(deposito_total)",
+                      "expression": "MEASURE(`deposito_total`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Evolución mensual de créditos y depósitos",
+                "description": "Saldos a fin de mes sumados entre los departamentos seleccionados"
+              },
+              "version": 3,
+              "mark": {
+                "colors": [
+                  "#2375A8",
+                  "#C89930"
+                ]
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "monthly(fecha)",
+                  "axis": {
+                    "title": "Mes"
+                  },
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fields": [
+                    {
+                      "fieldName": "measure(credito_total)",
+                      "displayName": "Crédito"
+                    },
+                    {
+                      "fieldName": "measure(deposito_total)",
+                      "displayName": "Depósitos"
+                    }
+                  ],
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "axis": {
+                    "title": "Millones de S/"
+                  },
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 0
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 8,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "ranking",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ultimo_mes",
+                  "fields": [
+                    {
+                      "name": "measure(credito_total)",
+                      "expression": "MEASURE(`credito_total`)"
+                    },
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Ranking de departamentos por crédito, último mes",
+                "description": "Saldo de crédito por departamento en el último mes, de mayor a menor"
+              },
+              "version": 3,
+              "mark": {
+                "colors": [
+                  "#2375A8"
+                ]
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "measure(credito_total)",
+                  "axis": {
+                    "title": "Millones de S/"
+                  },
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 0
+                    }
+                  },
+                  "displayName": "Crédito",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "departamento",
+                  "displayName": "Departamento",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 7,
+            "width": 4,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "dolar_depto",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "mensual",
+                  "fields": [
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    },
+                    {
+                      "name": "fecha",
+                      "expression": "`fecha`"
+                    },
+                    {
+                      "name": "measure(dolarizacion_credito)",
+                      "expression": "MEASURE(`dolarizacion_credito`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`departamento` IN ('Lima', 'Arequipa', 'La Libertad', 'Piura', 'Cusco')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Dolarización del crédito por departamento",
+                "description": "Porcentaje del crédito en dólares por mes en los principales departamentos"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "fecha",
+                  "axis": {
+                    "title": "Mes"
+                  },
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(dolarizacion_credito)",
+                  "axis": {
+                    "title": "% del crédito"
+                  },
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}%",
+                  "displayName": "Dolarización",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "departamento",
+                  "displayName": "Departamento",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 4,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "crecimiento",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "anual",
+                  "fields": [
+                    {
+                      "name": "signo",
+                      "expression": "`signo`"
+                    },
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    },
+                    {
+                      "name": "measure(crecimiento_credito)",
+                      "expression": "MEASURE(`crecimiento_credito`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Crecimiento anual del crédito por departamento",
+                "description": "Variación anual del saldo de crédito al cierre del año seleccionado"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "departamento",
+                  "axis": {
+                    "labelAngle": 45
+                  },
+                  "displayName": "Departamento",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "y-reversed"
+                    }
+                  }
+                },
+                "y": {
+                  "fieldName": "measure(crecimiento_credito)",
+                  "axis": {
+                    "title": "Crecimiento (%)"
+                  },
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}%",
+                  "displayName": "Crecimiento",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "signo",
+                  "displayName": "Signo",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 15,
+            "width": 4,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "detalle",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ultimo_mes",
+                  "fields": [
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    },
+                    {
+                      "name": "credito",
+                      "expression": "`credito`"
+                    },
+                    {
+                      "name": "deposito",
+                      "expression": "`deposito`"
+                    },
+                    {
+                      "name": "ratio_credito_deposito",
+                      "expression": "`ratio_credito_deposito`"
+                    },
+                    {
+                      "name": "dolarizacion_credito",
+                      "expression": "`dolarizacion_credito`"
+                    },
+                    {
+                      "name": "var_12m_credito",
+                      "expression": "`var_12m_credito`"
+                    },
+                    {
+                      "name": "participacion_credito",
+                      "expression": "`participacion_credito`"
+                    },
+                    {
+                      "name": "ranking_credito",
+                      "expression": "`ranking_credito`"
+                    }
+                  ],
+                  "disaggregated": true,
+                  "orders": [
+                    {
+                      "direction": "ASC",
+                      "expression": "`ranking_credito`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Detalle por departamento, último mes",
+                "description": "Indicadores clave de cada departamento ordenados por ranking de crédito"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "departamento",
+                    "displayName": "Departamento"
+                  },
+                  {
+                    "fieldName": "credito",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 0
+                      }
+                    },
+                    "displayName": "Crédito (mill. S/)"
+                  },
+                  {
+                    "fieldName": "deposito",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 0
+                      }
+                    },
+                    "displayName": "Depósitos (mill. S/)"
+                  },
+                  {
+                    "fieldName": "ratio_credito_deposito",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 2
+                      }
+                    },
+                    "displayName": "Ratio C/D"
+                  },
+                  {
+                    "fieldName": "dolarizacion_credito",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    },
+                    "displayName": "Dolarización",
+                    "formatTemplate": "{{ @formatted }}%"
+                  },
+                  {
+                    "fieldName": "var_12m_credito",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    },
+                    "displayName": "Var. 12m",
+                    "formatTemplate": "{{ @formatted }}%"
+                  },
+                  {
+                    "fieldName": "participacion_credito",
+                    "format": {
+                      "type": "number-plain",
+                      "abbreviation": "none",
+                      "decimalPlaces": {
+                        "type": "exact",
+                        "places": 1
+                      }
+                    },
+                    "displayName": "Participación",
+                    "formatTemplate": "{{ @formatted }}%"
+                  },
+                  {
+                    "fieldName": "ranking_credito",
+                    "displayName": "Ranking"
+                  }
+                ],
+                "rowOrder": [
+                  {
+                    "by": "column",
+                    "field": {
+                      "index": 7
+                    }
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 15,
+            "width": 4,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "seccion_hallazgos",
+            "spec": {
+              "widgetType": "text",
+              "version": 1,
+              "encodings": {
+                "text": {
+                  "lines": [
+                    "## Análisis de intermediación y hallazgos\n"
+                  ],
+                  "fields": []
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 24,
+            "width": 12,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "mapa_intermediacion",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "intermediacion",
+                  "fields": [
+                    {
+                      "name": "segmento",
+                      "expression": "`segmento`"
+                    },
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    },
+                    {
+                      "name": "dolarizacion_credito",
+                      "expression": "`dolarizacion_credito`"
+                    },
+                    {
+                      "name": "ratio_credito_deposito",
+                      "expression": "`ratio_credito_deposito`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": {
+                  "value": "Mapa de intermediación financiera, último mes",
+                  "fields": []
+                },
+                "description": {
+                  "value": "Sobre la línea, el departamento presta más de lo que capta localmente",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "annotations": [
+                {
+                  "type": "horizontal-line",
+                  "encodings": {
+                    "type": "constant",
+                    "y": {
+                      "dataValue": "1",
+                      "dataType": "DOUBLE"
+                    },
+                    "label": {
+                      "value": "Umbral: crédito igual a depósitos"
+                    },
+                    "color": {
+                      "value": "#5C6B73"
+                    }
+                  }
+                }
+              ],
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "dolarizacion_credito",
+                  "axis": {
+                    "title": "Dolarización del crédito (%)"
+                  },
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}%",
+                  "displayName": "Dolarización del crédito",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "ratio_credito_deposito",
+                  "axis": {
+                    "title": "Ratio crédito / depósito"
+                  },
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  },
+                  "displayName": "Ratio crédito / depósito",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "segmento",
+                  "legend": {
+                    "position": "bottom"
+                  },
+                  "displayName": "Segmento",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "departamento",
+                    "displayName": "Departamento"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 25,
+            "width": 4,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "heatmap_crecimiento",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "anual",
+                  "fields": [
+                    {
+                      "name": "measure(crecimiento_credito)",
+                      "expression": "MEASURE(`crecimiento_credito`)"
+                    },
+                    {
+                      "name": "anio",
+                      "expression": "`anio`"
+                    },
+                    {
+                      "name": "departamento",
+                      "expression": "`departamento`"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`anio` >= 2016"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "showDescription": true,
+                "title": "Mapa de calor del crecimiento anual del crédito",
+                "description": "Permite ver qué departamentos aceleran o frenan su crédito en el tiempo"
+              },
+              "version": 3,
+              "widgetType": "heatmap",
+              "encodings": {
+                "x": {
+                  "fieldName": "anio",
+                  "displayName": "Año",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "departamento",
+                  "displayName": "Departamento",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "measure(crecimiento_credito)",
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  },
+                  "formatTemplate": "{{ @formatted }}%",
+                  "displayName": "Crecimiento",
+                  "scale": {
+                    "type": "quantitative",
+                    "domain": {
+                      "mid": 0
+                    },
+                    "colorRamp": {
+                      "mode": "custom-diverging",
+                      "colors": {
+                        "start": "#C85070",
+                        "mid": "#FFFFFF",
+                        "end": "#52A870"
+                      }
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            },
+            "filterSources": {
+              "mode": "EXCLUDE",
+              "page": {
+                "names": [
+                  "f_anio"
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 25,
+            "width": 4,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "hallazgos",
+            "spec": {
+              "widgetType": "text",
+              "version": 1,
+              "encodings": {
+                "text": {
+                  "fields": [],
+                  "lines": [
+                    "### Hallazgos clave a diciembre 2025\n",
+                    "\n",
+                    "- El crédito nacional llegó a S/ 422 mil millones y creció 3.6 % en el año, mientras que los depósitos crecieron 5.1 %.\n",
+                    "- 17 de 25 departamentos prestan más de lo que captan. Tumbes, Puno y Amazonas tienen un ratio mayor a 1.6.\n",
+                    "- Lima, Arequipa y La Libertad concentran casi el 80 % del crédito, y la participación de Lima no cambió desde 2015.\n",
+                    "- El crédito en dólares bajó de 38 % a 23 % entre 2015 y 2025, y los depósitos en dólares de 44 % a 32 %.\n",
+                    "- Madre de Dios fue el departamento con mayor crecimiento del crédito en 2025, con casi 15 %.\n"
+                  ]
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 8,
+            "y": 25,
+            "width": 4,
+            "height": 10
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "canvasBackgroundColor": {
+        "light": "#EBEBEB",
+        "dark": "#08141A"
+      },
+      "widgetBackgroundColor": {
+        "light": "#FCFCFD",
+        "dark": "#13222B"
+      },
+      "widgetBorderColor": {
+        "light": "#FCFCFD",
+        "dark": "#13222B"
+      },
+      "selectionColor": {
+        "light": "#2272B4",
+        "dark": "#2272B4"
+      },
+      "visualizationColors": [
+        "#2375A8",
+        "#C89930",
+        "#15AFDD",
+        "#52A870",
+        "#C85070",
+        "#7A5BA8",
+        "#5C6B73"
+      ],
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED",
+      "widgetMargin": 12,
+      "widgetCornerRadius": 8,
+      "fontSettings": {
+        "base": {
+          "fontFamily": "Inter"
+        }
+      },
+      "visualizationColorMappings": [
+        {
+          "value": "Crédito",
+          "color": "#2375A8"
+        },
+        {
+          "value": "Depósitos",
+          "color": "#C89930"
+        },
+        {
+          "value": "Positivo",
+          "color": "#52A870"
+        },
+        {
+          "value": "Negativo",
+          "color": "#C85070"
+        },
+        {
+          "value": "Presta mucho más de lo que capta",
+          "color": "#1F3F66"
+        },
+        {
+          "value": "Presta más de lo que capta",
+          "color": "#2375A8"
+        },
+        {
+          "value": "Capta más de lo que presta",
+          "color": "#C89930"
+        }
+      ]
+    },
+    "applyModeEnabled": false
+  }
+}
